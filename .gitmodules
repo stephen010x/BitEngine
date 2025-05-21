@@ -1,0 +1,6 @@
+[submodule "bitgraphics"]
+	path = bitgraphics
+	url = https://github.com/stephen010x/BitGraphics.git
+[submodule "bitwindow"]
+	path = bitwindow
+	url = https://github.com/stephen010x/BitWindow.git
