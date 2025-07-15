@@ -21,13 +21,20 @@ LINUX_LIBS   :=
 WASM_LIBS    :=
 
 
-CC := GCC
-# change fvisiblity for when you turn this into a library
-CFLAGS := -fvisiblity=hidden
-LFLAGS := -static -no-pie -Wl,-nmagic
+CC := gcc
+# change fvisibility for when you turn this into a library
+#CFLAGS := -fvisibility=hidden -DENABLE_BITWIN_TEST_C -std=c23
+# NOTE: -std=c23 is strict c23 compliance, whereas -std=gnu23 includes gnu specific features
+# Here are the extensions
+# https://gcc.gnu.org/onlinedocs/gcc/C-Extensions.html
+CFLAGS := -DENABLE_BITWIN_TEST_C -std=gnu23
+# -static
+#LFLAGS := -Wl,-nmagic
+LFLAGS := -no-pie
 BFLAGS := -Wall -Wpedantic -Wextra
+#LIBS   :=
 
-DB := GDB
+DB := gdb
 DBFLAGS :=
 
 
@@ -49,11 +56,14 @@ RELEASE_BFLAGS := -Os -g0
 
 WINDOWS_CFLAGS := -D__WIN32__
 WINDOWS_LFLAGS :=
-WINDOWS_BFLAGS := -mx32
+WINDOWS_BFLAGS :=
 
 LINUX_CFLAGS := -D__LINUX__
-LINUX_LFLAGS := -lX11
-LINUX_BFLAGS := -mx32
+LINUX_LFLAGS := -lX11 -lrt
+# dammit no!!!
+#LINUX_BFLAGS := -mx32 -m32
+LINUX_BFLAGS := -m32
+#LINUX_LIBS   :=
 
 WASM_CFLAGS := -D__WEBASM__
 WASM_LFLAGS :=
@@ -147,7 +157,7 @@ BFLAGS += $(LINUX_BFLAGS)
 
 $(BINTARG): $(OBJS)
 	mkdir -p $(BINDIR)
-	$(CC) $(BFLAGS) $(LFLAGS) -o $@ -o $(basename $@).js $^
+	$(CC) $(BFLAGS) -o $@ -o $(basename $@) $^ $(LFLAGS)
 
 $(TMPDIR)/$(GOAL)/%.o: %.c $(TMPDIR)/$(GOAL)/%.d
 	mkdir -p $(dir $@)
@@ -155,7 +165,7 @@ $(TMPDIR)/$(GOAL)/%.o: %.c $(TMPDIR)/$(GOAL)/%.d
 
 $(TMPDIR)/$(GOAL)/%.d: %.c
 	mkdir -p $(dir $@)
-	$(CC) $(INCLUDE) -MM -MT $(patsubst %.d,%.o,$@) -MF $@ $<
+	$(CC) $(INCLUDE)  $(BFLAGS) $(CFLAGS) -MM -MT $(patsubst %.d,%.o,$@) -MF $@ $<
 
 
 clean:
@@ -169,8 +179,11 @@ run:
 
 
 gdb:
-	:
-	# nothing yet
+	gdb -x script.gdb ./$(BINTARG)
+
+
+analyze:
+	readelf -a $(BINTARG)
 
 
 endif
@@ -192,5 +205,5 @@ endif
 
 
 
-.PHONY: all fast debug release static dynamic clean test chrome shaders run gdb
+.PHONY: all fast debug release static dynamic clean test chrome shaders run gdb analyze
 .PHONY: _build _fast _debug _release _dynamic _static _optimize

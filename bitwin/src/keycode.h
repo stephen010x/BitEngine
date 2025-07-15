@@ -45,7 +45,7 @@
 #define KEY_SUPER_L     0xeb
 #define KEY_SUPER_R     0xec
 #define KEY_HYPER_L     0xed
-#define KEY_HYPER_L     0xee
+#define KEY_HYPER_R     0xee
 
 // latin
 #define KEY_SPACE       0x20

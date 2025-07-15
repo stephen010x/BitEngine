@@ -4,11 +4,12 @@
 //#include <stdatomic.h>
 #include <X11/Xlib.h>
 
-#include "../macrotools.h"
-#include "debug.h"
+#include "../macros.h"
+#include "../debug.h"
 #define LINUX_WINDOW_C
 #include "../bitwin.h"
 #include "../utils.h"
+#include "../keycode.h"
 
 // https://tronche.com/gui/x/xlib/
 // https://tronche.com/gui/x/xlib/window/XCreateWindow.html
@@ -27,28 +28,38 @@ typeof(*(XSetErrorHandler)NULL) bitwin_error_handler;
 
 
 
+// NOTE:
+// New style rule, all variables declared must appear at the top of their scope
+
 
 
 
 //int bitwin_new(bitwin_t *bitwin_p, int x, int y, unsigned int width, unsigned int height, char *title) {
+// TODO: add a way to set background color
 int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop) {
+    int      xscreen;
+    Display *xdisp;
+    Window   xrootwin;
+    Window   xwin;
+
     debug( XSetErrorHandler(&bitwin_error_handler); );
     
-    Display *xdisp = XOpenDisplay(NULL);
+    xdisp = XOpenDisplay(NULL);
     assert(("XOpenDisplay(NULL)", xdisp != NULL), 1);
 
-    int xscreen = DefaultScreen(xdisp);
+    xscreen = DefaultScreen(xdisp);
 
-    Window xrootwin = RootWindow(xdisp, xscreen);
+    xrootwin = RootWindow(xdisp, xscreen);
 
     // geez, the documentation is nonexistant for detecting whether or not this worked
     // so I guess we simply just have to assume it worked.
-    Window xwin = XCreateSimpleWindow(
+    xwin = XCreateSimpleWindow(
         xdisp, 
         xrootwin, 
         prop->x, prop->y, 
-        prop-?width, prop->height, 
+        prop->width, prop->height, 
         0, BlackPixel(xdisp, xscreen),     // border width and border color
+        //WhitePixel(xdisp, xscreen)         // background color
         BlackPixel(xdisp, xscreen)         // background color
     );
 
@@ -56,8 +67,7 @@ int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop) {
     XStoreName(xdisp, xwin, (prop->title != NULL) ? (prop->title) : (DEFAULT_WINDOW_NAME));
 
     // set callbacks
-    if (update_mask & (~BITWIN_ALL_EVENT_MASK))
-        prop->prop.callback_block = bitwin->prop.callback_block;
+    bitwin->prop.callback_block = prop->callback_block;
 
     bitwin->linux.xdisp = xdisp;
     bitwin->linux.xscreen = xscreen;
@@ -78,14 +88,14 @@ void bitwin_close(bitwin_t *bitwin) {
 }
 
 
+// TODO: I would like to make these inline, but it would require including the xlib header
+// in the header for this file, which I am wanting to avoid.
 void bitwin_show(bitwin_t *bitwin) {
     XMapWindow(bitwin->linux.xdisp, bitwin->linux.xwin);
-    return 0;
 }
 
 void bitwin_hide(bitwin_t *bitwin) {
     XUnmapWindow(bitwin->linux.xdisp, bitwin->linux.xwin);
-    return 0;
 }
 
 
@@ -96,7 +106,7 @@ void bitwin_hide(bitwin_t *bitwin) {
 int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask) {
 
     if (update_mask & (~(BITWIN_POS_MASK | BITWIN_SIZE_MASK))) { 
-        Window *root;
+        Window root;
         int x, y;
         unsigned int width, height, border_width, depth;
         
@@ -114,29 +124,30 @@ int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_m
     if (update_mask & (~BITWIN_TITLE_MASK))
         XStoreName(bitwin->linux.xdisp, bitwin->linux.xwin, 
             (prop->title != NULL) ? (prop->title) : (DEFAULT_WINDOW_NAME));
-    
+
 
     // as long as the callback members of the bitwin are 64 bit aligned, these should be thread safe
     // this is the only place that should set them, and it is fine if whatever is reading them
     // lapses one or two frames before it begins calling the right one.
     if (update_mask & (~BITWIN_ALL_EVENT_MASK)) {
         if (update_mask & (~BITWIN_KEY_EVENT_MASK))    
-            bitwin->prop.key_callback = prop->prop.key_callback;
+            bitwin->prop.key_callback = prop->key_callback;
         if (update_mask & (~BITWIN_MOUSE_EVENT_MASK))
-            bitwin->prop.mouse_callback = prop->prop.mouse_callback;
+            bitwin->prop.mouse_callback = prop->mouse_callback;
         if (update_mask & (~BITWIN_FOCUS_EVENT_MASK))
-            bitwin->prop.focus_callback = prop->prop.focus_callback;
-        if (update_mask & (~BITWIN_RESIZE_EVENT_MASK))
-            bitwin->prop.resize_callback = prop->prop.resize_callback;
+            bitwin->prop.focus_callback = prop->focus_callback;
+        //if (update_mask & (~BITWIN_RESIZE_EVENT_MASK))
+        //    bitwin->prop.resize_callback = prop->resize_callback;
         if (update_mask & (~BITWIN_CHANGE_EVENT_MASK))
-            bitwin->prop.change_callback = prop->prop.change_callback;
+            bitwin->prop.change_callback = prop->change_callback;
         if (update_mask & (~BITWIN_CLOSE_EVENT_MASK))
-            bitwin->prop.close_callback = prop->prop.close_callback;
+            bitwin->prop.close_callback = prop->close_callback;
         if (update_mask & (~BITWIN_EXPOSE_EVENT_MASK))
-            bitwin->prop.expose_callback = prop->prop.expose_callback;
-            bitwin->prop.close_callback = prop->prop.close_callback;
+            bitwin->prop.expose_callback = prop->expose_callback;
+        if (update_mask & (~BITWIN_CLOSE_EVENT_MASK))
+            bitwin->prop.close_callback = prop->close_callback;
         if (update_mask & (~BITWIN_SHOW_EVENT_MASK))
-            bitwin->prop.show_callback = prop->prop.show_callback;
+            bitwin->prop.show_callback = prop->show_callback;
     }
 
     return 0;
@@ -152,7 +163,7 @@ int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_m
 
     if (update_mask & (~(BITWIN_POS_MASK | BITWIN_SIZE_MASK))) {
     
-        Window *root;
+        Window root;
         int x, y;
         unsigned int width, height, border_width, depth;
         
@@ -160,7 +171,7 @@ int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_m
             &root, &x, &y, &width, &height, &border_width, &depth);
 
         prop->x = (int16_t)x;
-        prop->y = (int16_t)u;
+        prop->y = (int16_t)y;
         prop->width = (uint16_t)width;
         prop->height = (uint16_t)height;
     }
@@ -182,12 +193,15 @@ int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_m
 
 
 
-debug( int bitwin_error_handler(Display *restrict xdisp, XErrorEvent *restrict xerr) {
+#ifdef __DEBUG__
+int bitwin_error_handler(Display *restrict xdisp, XErrorEvent *restrict xerr) {
     char xerror_text[256];
-    XGetErrorText(xdisp, xerr->error_code, &xerr_test, sizeof(xerror_text));
-    fwarn("xlib error: '%s'", xerror_text);
+    
+    XGetErrorText(xdisp, xerr->error_code, xerror_text, sizeof(xerror_text));
+    warnf("xlib error: '%s'", xerror_text);
     return 0;   // the docs dont explain what value to return, so whatever.
-})
+}
+#endif
 
 
 
@@ -197,24 +211,20 @@ debug( int bitwin_error_handler(Display *restrict xdisp, XErrorEvent *restrict x
 // TODO: this is a big boy. Maybe try to find a way to reduce it's size
 // especially since it is handling all window messages
 int bitwin_handler(bitwin_t *restrict bitwin) {
-    XSelectInput(bitwin->linux.xdisp, bitwin->linux.xwin, 
-        KeyPressMask       | KeyReleaseMask       | 
-        ButtonPressMask    | ButtonReleaseMask    | PointerMotionMask |
-        EnterWindowMask    | LeaveWindowMask      | FocusChangeMask   | 
-        /*ExposureMask*/   | VisibilityChangeMask |
-        ResizeRedirectMask | StructureNotifyMask
-    }
 
     XEvent xevent;
+    bitwin_event_t event;
+    //struct State state;
+    
     // instanced to the handler, so information is retained. Good to know
-    bitwin_event_t event = {
+    event = (bitwin_event_t){
         .bitwin = bitwin,
     };
 
     // TODO: use XQueryPointer to get initial positions for mouse
     // to prevent initial jitter
     // nevermind. dx and dy are being relocated to bitinput
-    struct {
+    struct State {
         struct {
             /*int16_t x;
             int16_t y;
@@ -226,11 +236,26 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
             int16_t x, y;
             int16_t width, height;
         } change;
-    } state;
+    } state = {0}; // TODO: this should not be initilized to zero, but I am lazy. 
+                   //       It should start with actual win properties
+
+    XSelectInput(bitwin->linux.xdisp, bitwin->linux.xwin, 
+        KeyPressMask       | KeyReleaseMask       | 
+        ButtonPressMask    | ButtonReleaseMask    | PointerMotionMask |
+        EnterWindowMask    | LeaveWindowMask      | FocusChangeMask   | 
+        /*ExposureMask   |*/ VisibilityChangeMask |
+        /*ResizeRedirectMask |*/ StructureNotifyMask
+        // turns out resizeredirect is not good for me to do
+        // and I only ever want to use it if I am making a window manager
+        // in other words I can probably only resize child windows with it
+        // https://stackoverflow.com/questions/60493878/x11-in-c-cropping-happens-whenever-resizeredirectmask-is-set-when-the-window
+    );
 
     //bitwin_p->run_event_handler = true;
     //while (bitwin_p->run_event_handler) {
     for(;;) {
+        int retval;
+    
         XNextEvent(bitwin->linux.xdisp, &xevent);   // blocking if event queue empty
 
         if (xevent.xany.window != bitwin->linux.xwin)
@@ -247,7 +272,7 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
             //case NoExpose:          event.type = ;   break;
             case KeyPress:          event.type = BITWIN_KEYDOWN; break;
             case KeyRelease:        event.type = BITWIN_KEYUP;   break;
-            case ResizeRequest:     event.type = BITWIN_RESIZE;  break;
+            //case ResizeRequest:     event.type = BITWIN_RESIZE;  break;
             case ConfigureNotify:   event.type = BITWIN_CHANGE;  break;
             case DestroyNotify:     event.type = BITWIN_CLOSE;   break;
             case MapNotify:         event.type = BITWIN_SHOW;    break;
@@ -259,7 +284,8 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
         }
 
         // set time of event
-        event.time = milli();
+        //event.time_ms = milli();
+        event.time_ms = 1000;
 
         // second pass for shared variables and function calls
         // the state mouse needed so that the dx is only updated once per frame
@@ -272,7 +298,8 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
             case ButtonPress:
             case ButtonRelease:
                 //event.time = xevent.xbutton.time;
-                event.mouse = {
+                //event.mouse = (typeof(((bitwin_event_t*)NULL)->mouse)){
+                event.mouse = (MEMBER_TYPE(bitwin_event_t, mouse)){
                     .mod = KEY_NULL,    // TODO: xevent.xbutton.state
                     .button = (uint8_t)xevent.xbutton.button,
                     .x = xevent.xmotion.x,
@@ -284,7 +311,7 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
                 
             case MotionNotify:
                 //event.time = xevent.xbutton.time;
-                event.mouse = {
+                event.mouse = (MEMBER_TYPE(bitwin_event_t, mouse)){
                     .mod = KEY_NULL,    // TODO: xevent.xbutton.state
                     .button = state.mouse.button,
                     .x = xevent.xmotion.x,
@@ -296,7 +323,7 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
             case EnterNotify:
             case LeaveNotify:
                 //event.time = xevent.xbutton.time;
-                event.mouse = {
+                event.mouse = (MEMBER_TYPE(bitwin_event_t, mouse)){
                     .mod = KEY_NULL,    // TODO: xevent.xbutton.state
                     .button = state.mouse.button,
                     .x = xevent.xcrossing.x,
@@ -319,28 +346,29 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
                 
             case KeyPress:
             case KeyRelease:
-                event.key = {
+                event.key = (MEMBER_TYPE(bitwin_event_t, key)){
                     .mod = KEY_NULL,    // TODO: for my own sanity, fix the mod and the keycodes later
-                    .button = (uint8_t)xevent.xkey.keycode;
+                    .keycode = (uint8_t)xevent.xkey.keycode,
                 };
                 break;
 
                 
-            case ResizeRequest:
-                event.resize = {
-                    .width  = xevent.xresizerequest.width;
-                    .height = xevent.xresizerequest.height;
+            /*case ResizeRequest:
+                event.resize = (MEMBER_TYPE(bitwin_event_t, resize)){
+                    .width  = xevent.xresizerequest.width,
+                    .height = xevent.xresizerequest.height,
                 };
-                break;
+                break;*/
 
             
             case ConfigureNotify:
-                event.change = {
-                    .change_mask = 0;
-                    .x = xevent.xconfigurerequest.x;
-                    .y = xevent.xconfigurerequest.y;
-                    .width  = xevent.xconfigurerequest.width;
-                    .height = xevent.xconfigurerequest.height;
+                //TODO: maybe use typeof(event.change) rather than MEMBER_TYPE(bitwin_event_t, change)
+                event.change = (MEMBER_TYPE(bitwin_event_t, change)){
+                    .change_mask = 0,
+                    .x = xevent.xconfigurerequest.x,
+                    .y = xevent.xconfigurerequest.y,
+                    .width  = xevent.xconfigurerequest.width,
+                    .height = xevent.xconfigurerequest.height,
                 };
                 
                 // if change occurred between new and old states, then add it to change mask
@@ -350,11 +378,11 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
                 if (event.change.height != state.change.height) event.change.change_mask |= BITWIN_HEIGHT_MASK;
                 
                 // update state
-                state.change = {
-                    .x = event.change.x;
-                    .y = event.change.y;
-                    .width  = event.change.width;
-                    .height = event.change.height;
+                state.change = (typeof(state.change)){
+                    .x = event.change.x,
+                    .y = event.change.y,
+                    .width  = event.change.width,
+                    .height = event.change.height,
                 };
                 break;
 
@@ -374,52 +402,77 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
         }
 
 
+        retval = 0;
 
+        
         // TODO: optimize these so that there arent three whole switch case statements for this
         // I guess we are doing this a third time for the function calls
         switch (xevent.type) {
+        
             case ButtonPress:
             case ButtonRelease:
             case MotionNotify:
             case EnterNotify:
             case LeaveNotify:
-                bitwin->prop.mouse_callback(bitwin, &event);
+                if (bitwin->prop.mouse_callback != NULL)
+                    retval = bitwin->prop.mouse_callback(bitwin, &event);
                 break;
+
             
             case KeyPress:
             case KeyRelease:
-                if (!bitwin->prop.key_callback(bitwin, &event)) {
+                if (bitwin->prop.key_callback != NULL)
+                    retval = bitwin->prop.key_callback(bitwin, &event);
+
+                if (retval == 0) {
                     // TODO: add a ctrl+q keypress here that will close window
                 }
                 break;
+
             
-            case ResizeRequest:
+            /*case ResizeRequest:
                 // TODO: I am actually not sure if this intercepts the resize
                 // or if it would just happen anyway
-                if (!bitwin->prop.resize_callback(bitwin, &event)) {
-                    XResizeWindow(d, bitwin->xwin, event.resize.width, event.resize.height);
+                //debugf("prop.resize_callback = %p", (void*)(uintptr_t)bitwin->prop.resize_callback);
+                if (bitwin->prop.resize_callback != NULL)
+                    retval = bitwin->prop.resize_callback(bitwin, &event);
+                
+                if (retval == 0) {
+                    XResizeWindow(bitwin->linux.xdisp, bitwin->linux.xwin,
+                        500, 500);
                 }
-                break;
+                break;*/
+
             
             case ConfigureNotify:
-                bitwin->prop.change_callback(bitwin, &event);
+                if (bitwin->prop.change_callback != NULL)
+                    retval = bitwin->prop.change_callback(bitwin, &event);
                 break;
+
             
             case DestroyNotify:
-                if (!bitwin->prop.resize_callback(bitwin, &event)) {
+                if (bitwin->prop.close_callback != NULL)
+                    retval = bitwin->prop.close_callback(bitwin, &event);
+
+                if (retval == 0) {
                     return 0;
                 }
                 break;
+
             
             case MapNotify:
             case UnmapNotify:
-                bitwin->prop.show_callback(bitwin, &event);
+                if (bitwin->prop.show_callback != NULL)
+                    retval = bitwin->prop.show_callback(bitwin, &event);
                 break;
+
             
             case FocusIn:
             case FocusOut:
-                bitwin->prop.focus_callback(bitwin, &event);
+                if (bitwin->prop.focus_callback != NULL)
+                    retval = bitwin->prop.focus_callback(bitwin, &event);
                 break;
+                
         }
     }
 

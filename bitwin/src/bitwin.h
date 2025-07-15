@@ -26,6 +26,11 @@ typedef int32_t Window;
 // values that are meant to be private.
 
 
+typedef struct _bitwin bitwin_t;
+typedef struct _bitwin_event bitwin_event_t;
+typedef struct _bitwin_prop bitwin_prop_t;
+
+
 
 #define BITWIN_VOID_MASK    (0<<0)
 #define BITWIN_X_MASK       (1<<0)
@@ -47,13 +52,13 @@ typedef int32_t Window;
 #define BITWIN_KEY_EVENT_MASK       (1<<5)
 #define BITWIN_MOUSE_EVENT_MASK     (1<<6)
 #define BITWIN_FOCUS_EVENT_MASK     (1<<7)
-#define BITWIN_RESIZE_EVENT_MASK    (1<<8)
+//#define BITWIN_RESIZE_EVENT_MASK    (1<<8)
 #define BITWIN_CHANGE_EVENT_MASK    (1<<9)
 #define BITWIN_CLOSE_EVENT_MASK     (1<<10)
 #define BITWIN_EXPOSE_EVENT_MASK    (1<<11)
 #define BITWIN_SHOW_EVENT_MASK      (1<<12)
 #define BITWIN_INPUT_EVENT_MASK     (BITWIN_KEY_EVENT_MASK    | BITWIN_MOUSE_EVENT_MASK )
-#define BITWIN_WINDOW_EVENT_MASK    (BITWIN_FOCUS_EVENT_MASK  | BITWIN_RESIZE_EVENT_MASK | \
+#define BITWIN_WINDOW_EVENT_MASK    (BITWIN_FOCUS_EVENT_MASK  | /*BITWIN_RESIZE_EVENT_MASK |*/ \
                                      BITWIN_CHANGE_EVENT_MASK | BITWIN_CLOSE_EVENT_MASK  | \
                                      BITWIN_EXPOSE_EVENT_MASK)
 #define BITWIN_ALL_EVENT_MASK       (BITWIN_INPUT_EVENT_MASK  | BITWIN_WINDOW_EVENT_MASK)
@@ -65,7 +70,7 @@ typedef uint16_t bitwin_mask_t;
 typedef int (*bitwin_event_callback_t)(const bitwin_t *, const bitwin_event_t *);
 
 
-typedef struct {
+struct _bitwin_prop {
     int16_t x, y;
     int16_t width, height;
     char* title;
@@ -80,9 +85,13 @@ typedef struct {
             bitwin_event_callback_t key_callback;
             bitwin_event_callback_t mouse_callback;
             bitwin_event_callback_t focus_callback;
-            // can be used to intercept and prevent resizes
-            bitwin_event_callback_t resize_callback;
-            // for when a property of window changes (see bitwin_prop_t)
+            // for when the window is resized
+            // it is worth noting that for both the resize and the change events, 
+            // resizing the window doesn't change the client area automatically
+            // return 0 to let that scale automatically, and return nonzero to handle 
+            // it yourself
+            //bitwin_event_callback_t resize_callback;
+            // for when a geometry property changes on the window
             bitwin_event_callback_t change_callback;
             bitwin_event_callback_t close_callback;
             bitwin_event_callback_t show_callback;
@@ -90,10 +99,10 @@ typedef struct {
             bitwin_event_callback_t expose_callback;
         };
         struct {
-            bitwin_event_callback_t _cb[8];
+            bitwin_event_callback_t _cb[7];
         } callback_block;
     };
-} bitwin_prop_t;
+};
 
 
 enum {
@@ -114,22 +123,22 @@ enum {
     BITWIN_BTNUP,
     BITWIN_BTNDOWN,
     // struct resize
-    BITWIN_RESIZE,
+    //BITWIN_RESIZE,
     // struct change
-    BITWIN_CHANGE
+    BITWIN_CHANGE,
     // struct expose
-    BITWIN_EXPOSE
-    BITWIN_NOEXPOSE
+    BITWIN_EXPOSE,
+    BITWIN_NOEXPOSE,
     // no struct
     BITWIN_FOCUS,
     BITWIN_UNFOCUS,
     BITWIN_SHOW,
     BITWIN_HIDE,
     BITWIN_CLOSE,
-}
+};
 
 
-typedef struct {
+struct _bitwin_event {
     bitwin_t *bitwin;
     uint32_t time_ms;
     uint16_t type;
@@ -156,9 +165,9 @@ typedef struct {
         // consolidate resize and change structs
         // really they should be the same thing, and changes
         // should be interceptable with all of them
-        struct {
+        /*struct {
             int16_t width, height;
-        } resize;
+        } resize;*/
         
         struct {
             bitwin_mask_t change_mask;
@@ -177,11 +186,15 @@ typedef struct {
         } expose;*/                   // only evaluate if count=0 for simple expose handling
         
     };
-} bitwin_event_t;
+};
 
 
 
-typedef struct _bitwin {
+// I guess the gnu23 standard defines linux as a macros somewhere,
+// and it was causing a whole lot of compiler errors
+#undef linux
+
+struct _bitwin {
     union {
     
         struct {            // for linux
@@ -192,12 +205,14 @@ typedef struct _bitwin {
         
         struct {
             // ...
+            void* none; // to satiate the pedantic gods
         } win32;
         
         struct {
             // ...
+            void* none; // to satiate the pedantic gods
         } wasm;
-    }
+    };
     //_Atomic bool run_event_handler;
     //bool run_event_handler;
 
@@ -217,16 +232,17 @@ typedef struct _bitwin {
     // that doesn't need to be set every time. So nevermind.
     // also, the handler doesnt return until window close, so it is instanced anyway.
     //bitwin_event_t event;
-} bitwin_t;
+};
 
 
 
-int bitwin_new(bitwin_t *bitwin, bitwin_prop_t *prop);
+int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop);
 void bitwin_close(bitwin_t *bitwin);
 void bitwin_show(bitwin_t *bitwin);
 void bitwin_hide(bitwin_t *bitwin);
-int bitwin_set(bitwin_t *bitwin, bitwin_prop_t *prop, bitwin_mask_t update_mask);
-int bitwin_get(bitwin_t *bitwin, bitwin_prop_t *prop, bitwin_mask_t update_mask);
+int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask);
+int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask);
+int bitwin_handler(bitwin_t *restrict bitwin);
 
 
 #endif
