@@ -202,8 +202,14 @@ endif
 
 
 
+preprocess:
+	gcc -DENABLE_BITWIN_TEST_C -D__DEBUG__ -D__LINUX__ -E src/linux/bitwin.c -o bin/bitwin.pp.c
 
 
+
+
+# figure out what to do with this one
+.PHONY: preprocess
 
 .PHONY: all fast debug release static dynamic clean test chrome shaders run gdb analyze
 .PHONY: _build _fast _debug _release _dynamic _static _optimize
