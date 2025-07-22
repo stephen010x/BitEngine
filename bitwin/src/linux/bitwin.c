@@ -2,14 +2,13 @@
 #include <stdbool.h>
 #include <time.h>
 //#include <stdatomic.h>
+//#include <GL/gl.h>
+#include <GL/glx.h>
 #include <X11/Xlib.h>
 
-#include "../macros.h"
-#include "../debug.h"
-#define LINUX_WINDOW_C
-#include "../bitwin.h"
-#include "../utils.h"
-#include "../keycode.h"
+#define LINUX_BITWIN_C
+#include "utils/debug.h"
+#include "bitwin.h"
 
 // https://tronche.com/gui/x/xlib/
 // https://tronche.com/gui/x/xlib/window/XCreateWindow.html
@@ -24,7 +23,12 @@
 #define DEFAULT_WINDOW_NAME "BitWindow"
 
 
-typeof(*(XSetErrorHandler)NULL) bitwin_error_handler;
+#ifdef __DEBUG__
+static typeof(*(XSetErrorHandler)NULL) bitwin_error_handler;
+#endif
+
+
+//int init_opengl(const bitwin_t *bitwin);
 
 
 
@@ -36,24 +40,61 @@ typeof(*(XSetErrorHandler)NULL) bitwin_error_handler;
 
 //int bitwin_new(bitwin_t *bitwin_p, int x, int y, unsigned int width, unsigned int height, char *title) {
 // TODO: add a way to set background color
-int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop) {
+__share int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop) {
     int      xscreen;
     Display *xdisp;
     Window   xrootwin;
     Window   xwin;
-
-    debug( XSetErrorHandler(&bitwin_error_handler); );
     
+    XVisualInfo *xvisual;
+    XSetWindowAttributes xwin_attrib;
+
+    // set opengl attributes for display
+    // so the depth and alpha are not needed in the main framebuffer
+    // because it is all now entirely handled by the cameras now
+    int glx_attribs[] = { 
+        GLX_RGBA,
+        GLX_RED_SIZE, 8,
+        GLX_GREEN_SIZE, 8,
+        GLX_BLUE_SIZE, 8,
+        GLX_ALPHA_SIZE, 0, // No alpha buffer
+        GLX_DEPTH_SIZE, 0, // No depth buffer
+        GLX_DOUBLEBUFFER, True,
+        None, // basically a null terminator for this list
+    };
+
+    // set up error handler
+    debug( XSetErrorHandler(&bitwin_error_handler) );
+
+
+    // obtain some default values for display, root window, and screen
     xdisp = XOpenDisplay(NULL);
     assert(("XOpenDisplay(NULL)", xdisp != NULL), 1);
-
     xscreen = DefaultScreen(xdisp);
-
     xrootwin = RootWindow(xdisp, xscreen);
 
+
+    // set up window visuals
+    xvisual = glXChooseVisual(xdisp, xscreen, glx_attribs);
+    //debugf("xvisual = %p", xvisual);
+    assert(("glXChooseVisual(...)", xvisual != NULL), 2);
+
+    // set up window attributes
+    xwin_attrib = (typeof(xwin_attrib)){
+        .colormap = XCreateColormap(xdisp, xrootwin, xvisual->visual, AllocNone),
+        //.event_mask = NoEventMask, // I am just going to settle with setting this later in the
+                                   // event handler function
+        .background_pixmap = None,
+        .background_pixel = debug_else(
+                WhitePixel(xdisp, xscreen),
+                BlackPixel(xdisp, xscreen)
+            ),
+    };
+    
+
     // geez, the documentation is nonexistant for detecting whether or not this worked
-    // so I guess we simply just have to assume it worked.
-    xwin = XCreateSimpleWindow(
+    // so I guess we simply just have to assume it works every time.
+    /*xwin = XCreateSimpleWindow(
         xdisp, 
         xrootwin, 
         prop->x, prop->y, 
@@ -61,6 +102,15 @@ int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop) {
         0, BlackPixel(xdisp, xscreen),     // border width and border color
         //WhitePixel(xdisp, xscreen)         // background color
         BlackPixel(xdisp, xscreen)         // background color
+    );*/
+
+    xwin = XCreateWindow(
+        xdisp, xrootwin, 
+        prop->x, prop->y, 
+        prop->width, prop->height, 0,                       // width, height, and border width
+        CopyFromParent, CopyFromParent, xvisual->visual,    // window depth, class, and visual
+        CWBackPixmap | CWBackPixel | CWColormap,            // window attribute mask
+        &xwin_attrib                                        // window attribute struct
     );
 
     // set window title
@@ -69,18 +119,33 @@ int bitwin_new(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop) {
     // set callbacks
     bitwin->prop.callback_block = prop->callback_block;
 
+    // set bitwin struct properties
     bitwin->linux.xdisp = xdisp;
     bitwin->linux.xscreen = xscreen;
     bitwin->linux.xwin = xwin;
+
+    // create OpenGL context
+    bitwin->linux.glx_context = glXCreateContext(xdisp, xvisual, NULL, GL_TRUE);
+
+    XFree(xvisual);
 
     return 0;
 }
 
 
 
+// will bind the current opengl context such that future opengl calls apply to this context
+__share int bitwin_bind(bitwin_t *bitwin) {
+    return !glXMakeCurrent(bitwin->linux.xdisp, bitwin->linux.xwin, bitwin->linux.glx_context);
+}
+
+__share int bitwin_unbind(bitwin_t *bitwin) {
+    return !glXMakeCurrent(bitwin->linux.xdisp, None, NULL);
+}
 
 
-void bitwin_close(bitwin_t *bitwin) {
+
+__share void bitwin_close(bitwin_t *bitwin) {
     debug( XSetErrorHandler(NULL); );
     XDestroyWindow(bitwin->linux.xdisp, bitwin->linux.xwin);
     XCloseDisplay(bitwin->linux.xdisp);
@@ -88,22 +153,32 @@ void bitwin_close(bitwin_t *bitwin) {
 }
 
 
+
+
 // TODO: I would like to make these inline, but it would require including the xlib header
 // in the header for this file, which I am wanting to avoid.
-void bitwin_show(bitwin_t *bitwin) {
+__share void bitwin_show(bitwin_t *bitwin) {
     XMapWindow(bitwin->linux.xdisp, bitwin->linux.xwin);
 }
 
-void bitwin_hide(bitwin_t *bitwin) {
+
+
+
+__share void bitwin_hide(bitwin_t *bitwin) {
     XUnmapWindow(bitwin->linux.xdisp, bitwin->linux.xwin);
 }
 
 
 
 
+__share void bitwin_swap(bitwin_t *bitwin) {
+    glXSwapBuffers(bitwin->linux.xdisp, bitwin->linux.xwin);
+}
 
 
-int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask) {
+
+
+__share int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask) {
 
     if (update_mask & (~(BITWIN_POS_MASK | BITWIN_SIZE_MASK))) { 
         Window root;
@@ -159,7 +234,7 @@ int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_m
 
 
 // I am just going to be lazy with the efficiency of this function.
-int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask) {
+__share int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask) {
 
     if (update_mask & (~(BITWIN_POS_MASK | BITWIN_SIZE_MASK))) {
     
@@ -194,7 +269,7 @@ int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_m
 
 
 #ifdef __DEBUG__
-int bitwin_error_handler(Display *restrict xdisp, XErrorEvent *restrict xerr) {
+static int bitwin_error_handler(Display *restrict xdisp, XErrorEvent *restrict xerr) {
     char xerror_text[256];
     
     XGetErrorText(xdisp, xerr->error_code, xerror_text, sizeof(xerror_text));
@@ -210,7 +285,7 @@ int bitwin_error_handler(Display *restrict xdisp, XErrorEvent *restrict xerr) {
 
 // TODO: this is a big boy. Maybe try to find a way to reduce it's size
 // especially since it is handling all window messages
-int bitwin_handler(bitwin_t *restrict bitwin) {
+__share int bitwin_handler(bitwin_t *restrict bitwin) {
 
     XEvent xevent;
     bitwin_event_t event;
@@ -284,8 +359,8 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
         }
 
         // set time of event
-        //event.time_ms = milli();
-        event.time_ms = 1000;
+        event.time_ms = millis();
+        //event.time_ms = 1000;
 
         // second pass for shared variables and function calls
         // the state mouse needed so that the dx is only updated once per frame
@@ -482,7 +557,6 @@ int bitwin_handler(bitwin_t *restrict bitwin) {
 
 
 //int bitwin_exit_handler_block(bitwin_t *bitwin_p) {}
-
 
 
 

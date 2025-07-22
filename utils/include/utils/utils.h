@@ -1,11 +1,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <time.h>
+//#include <time.h>
 #include <stdint.h>
 
-#include "macros.h"
-#include "debug.h"
+//#include "bitwin/macros.h"
+//#include "bitwin/debug.h"
 
 
 //#define TICK_TO_MILLI(__n) ((uint32_t)((((uint64_t)__n)*1000)/CLOCKS_PER_SEC))
@@ -16,6 +16,10 @@
 
 
 const char* filename_from_path(const char* path);
+
+uint32_t millis_usage_total(void);
+uint32_t millis_usage(void);
+uint32_t millis(void);
 
 
 // use to reset millisecond clock
@@ -31,27 +35,7 @@ const char* filename_from_path(const char* path);
 }*/
 
 
-// get milliseconds since program start
-// TODO: may be a linux specific implementation, so consider moving this to linux dir
-__force_inline uint32_t milli(void) {
-    //debugf("clock() = %ld", clock());
-    // the clock() function was misbehaving, and was incrementing arbitrary values
-    // every time called rather than keeping time
-    //uint32_t time = TICK_TO_MILLI(clock()) - start_time;
 
-    struct timespec tp;
-
-    // cpu time consumed by all threads in this process
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tp);
-
-    uint32_t time = (uint32_t)((uint64_t)tp.tv_sec * 1000 + (uint64_t)tp.tv_nsec / 1000000);
-    
-    debug( once(
-        debugf("CLOCKS_PER_SEC = %ld", CLOCKS_PER_SEC);
-        debugf("first call to milli() returned %u ms", time);
-    ););
-    return time;
-}
 
 
 

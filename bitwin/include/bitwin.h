@@ -1,21 +1,30 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
+// NOTE: Don't include <GL/glx.h> after this file, or type errors will occur
+
 #include <stdint.h>
 #include <limits.h>
+
+// TODO: find a way to remove the macros dependancy from this header file
+// I want people to only have access to this if they explicitly include it themselves
+#include "utils/macros.h"
+//#include "bitwin/debug.h"
+#include "utils/utils.h"
+#include "bitwin/keycode.h"
 
 
 #define BITWIN_DEFAULT_X 0
 #define BITWIN_DEFAULT_Y 0
 
 
-#ifdef LINUX_WINDOW_C
-
-#elifdef WIN32_WINDOW_C
-
-#else
-typedef void* Display;
-typedef int32_t Window;
+#ifdef LINUX_BITWIN_C
+#elifdef WIN32_BITWIN_C
+#elifndef _X11_XLIB_H_
+typedef unsigned long XID;
+typedef void Display;         // is struct, so only to be used as a pointer in the header
+typedef XID Window;
+typedef void *GLXContext;
 #endif
 
 
@@ -103,6 +112,8 @@ struct _bitwin_prop {
         } callback_block;
     };
 };
+
+
 
 
 enum {
@@ -201,6 +212,7 @@ struct _bitwin {
             Display *xdisp;
             int xscreen;
             Window xwin;
+            GLXContext glx_context;
         } linux;
         
         struct {
@@ -242,7 +254,14 @@ void bitwin_show(bitwin_t *bitwin);
 void bitwin_hide(bitwin_t *bitwin);
 int bitwin_set(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask);
 int bitwin_get(bitwin_t *restrict bitwin, bitwin_prop_t *restrict prop, bitwin_mask_t update_mask);
+// runs event handler. only returns when window is destroyed
 int bitwin_handler(bitwin_t *restrict bitwin);
+// binds graphics context
+int bitwin_bind(bitwin_t *bitwin);
+int bitwin_unbind(bitwin_t *bitwin);
+// swap buffers, basically update the screen with the new buffer
+// TODO: consider different name
+void bitwin_swap(bitwin_t *bitwin);
 
 
 #endif

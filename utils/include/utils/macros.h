@@ -6,7 +6,8 @@
 #define STRINGIFY(__0) _STRINGIFY(__0)
 #define _STRINGIFY(__0) #__0
 
-#define NOP() ((void)0)
+#define NOP() do {} while(0)
+#define VOID_VAL ((void)0)
 #define lenof(__0) (sizeof(__0)/sizeof(*(__0)))
 
 #define stringify(__0) _stringify(__0)
@@ -34,7 +35,8 @@
 // first two arguments are passed as registers
 #define __fastcall __attribute__((fastcall))
 // first argument passed as register, meant for passing self as first argument
-#define __selfcall __attribute__((thiscall))
+// turns out this is for C++ only I guess
+//#define __selfcall __attribute__((thiscall))
 // for interrupt handlers
 #define __interrupt __attribute__((interrupt))
 // allows external library functions (dynamic, probably), to be overridden
@@ -80,6 +82,15 @@
 // so that they persist even when the program is killed
 // ELF specific
 #define __persist __attribute__((persistent))
+
+#ifdef __DYNAMIC_LIB__
+    // this will make a function visable when compiling as a shared library when the 
+    // -fvisibility=internal or -fvisibility=hidden compiler flags are set
+#   define __share __attribute__((visibility("default")))
+#else
+#   define __share
+#endif
+
 
 // =========================================
 // ========= TYPE ATTRIBUTES ===============

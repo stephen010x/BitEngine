@@ -1,18 +1,20 @@
 #ifndef ASSERT_H
 #define ASSERT_H
 
-#ifdef __DEBUG__
+//#ifdef __DEBUG__
 #include <stdlib.h>
-#endif
+#include <stdio.h>
+//#endif
 // TODO: copy some of the macros from this to remove it as a header dependancy
 #include <assert.h>
 // https://github.com/lattera/glibc/blob/master/assert/assert.h
 
-#include "macros.h"
+// TODO move debug.h and macros.h to their own library like env or something
+#include "utils/macros.h"
 //#include "utils.h"
 
 
-// Cautionnot static!
+// Caution! not static!
 #define __FILENAME__ filename_from_path(__FILE__)
 
 
@@ -31,6 +33,7 @@
 #define STR_ERROR   ANSI_RED              "[error]"   ANSI_DEFAULT
 #define STR_WARN    ANSI_YELLOW           "[warn] "   ANSI_DEFAULT
 #define STR_DEBUG                         "[debug]"
+#define STR_MSG                           "[msg]"
 
 
 #define SYSTEM_MSG(__status, __format, ...) do {                                    \
@@ -80,13 +83,13 @@ const char* filename_from_path(const char* path);
 #   define debugf(...)      NOP()
 
 
-#   define debug(__statement) NOP()
+#   define debug(__statement) VOID_VAL
+#   define debug_else(__statement, __else) ({ __else; })
+//#   define debug_else(__statement, __else) ( __else )
 
 
 #else
 
-
-#   include <stdio.h>
 
 //extern char *assert_format;
 
@@ -161,9 +164,12 @@ const char* filename_from_path(const char* path);
     } while(0)
 
 
-#   define debug(__statement) do {      \
-        __statement                     \
-    } while(0)
+// now can return a value if necissary
+#   define debug(__statement) ({ __statement; })
+//#   define debug(__statement) ( __statement )
+
+#   define debug_else(__statement, __else) ({ __statement; })
+//#   define debug_else(__statement, __else) ( __statement )
 
 
 /*#   define debugf(__format, ...) do {                               \
@@ -176,6 +182,11 @@ const char* filename_from_path(const char* path);
 
 
 #endif
+
+
+
+#define msgf(__format, ...)                                         \
+        SYSTEM_MSG(STR_MSG, __format __VA_OPT__(,) __VA_ARGS__);
 
 
 
